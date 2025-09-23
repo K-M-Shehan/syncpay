@@ -9,19 +9,19 @@ sleep 2
 
 # Start nodes in background
 echo "Starting Node 1 (Port 5000)..."
-cd src && python main.py node1 > ../logs/node1.log 2>&1 &
+cd src && source ../syncpay_env/bin/activate && python3 main.py node1 > ../logs/node1.log 2>&1 &
 NODE1_PID=$!
 
 sleep 2
 
 echo "Starting Node 2 (Port 5001)..."
-python main.py node2 > ../logs/node2.log 2>&1 &
+source ../syncpay_env/bin/activate && python3 main.py node2 > ../logs/node2.log 2>&1 &
 NODE2_PID=$!
 
 sleep 2
 
 echo "Starting Node 3 (Port 5002)..."  
-python main.py node3 > ../logs/node3.log 2>&1 &
+source ../syncpay_env/bin/activate && python3 main.py node3 > ../logs/node3.log 2>&1 &
 NODE3_PID=$!
 
 # Create logs directory if it doesn't exist
