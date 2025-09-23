@@ -1,0 +1,233 @@
+# SyncPay - Distributed Payment System .gitignore
+
+# Virtual Environment
+syncpay_env/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# Pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Project-specific files
+# Logs and runtime files
+logs/
+*.log
+*.out
+*.err
+
+# Process IDs
+.pids
+*.pid
+
+# Database files (if using SQLite for development)
+*.db
+*.sqlite
+*.sqlite3
+
+# Configuration files with sensitive data
+configs/production.json
+configs/secrets.json
+.env.local
+.env.production
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Node.js (if you add any frontend components later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Report generation temporary files
+report/temp/
+report/*.aux
+report/*.fdb_latexmk
+report/*.fls
+report/*.synctex.gz
+
+# Presentation temporary files
+docs/presentation/temp/
+*.pptx~
+
+# Performance and profiling data
+*.prof
+*.pstats
+
+# Local development overrides
+local_config.py
+dev_settings.py
+
+# SSL certificates and keys (if implementing HTTPS)
+*.key
+*.crt
+*.pem
+
+# Docker (if you containerize later)
+.dockerignore
+
+# Compiled translations
+*.mo
+
+# Flask session files
+flask_session/
+
+# Local test results
+test_results/
+benchmark_results/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+*.lnk
+*.exe~
+
+# Linux
+*.swp
+*.swo
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Vim
+*.swp
+*.swo
+Session.vim
+.netrwhist
