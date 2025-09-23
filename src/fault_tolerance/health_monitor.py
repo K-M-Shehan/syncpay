@@ -126,6 +126,10 @@ class HealthMonitor:
         else:
             self.logger.debug(f"Peer {peer_url} check failed ({peer_status['consecutive_failures']}/{self.failure_threshold}): {error_reason}")
     
+    def handle_peer_failure(self, peer_url):
+        """Public method to handle peer failure (for testing and external triggers)"""
+        self._handle_peer_failure(peer_url)
+    
     def _handle_peer_failure(self, peer_url):
         """Handle detected peer failure"""
         self.logger.error(f"PEER FAILURE DETECTED: {peer_url}")
@@ -135,6 +139,10 @@ class HealthMonitor:
         
         # Notify other components about the failure
         self._notify_failure(peer_url)
+    
+    def handle_peer_recovery(self, peer_url):
+        """Public method to handle peer recovery (for testing and external triggers)"""
+        self._handle_peer_recovery(peer_url)
     
     def _handle_peer_recovery(self, peer_url):
         """Handle peer recovery"""
