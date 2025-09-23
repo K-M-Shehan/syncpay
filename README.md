@@ -135,4 +135,27 @@ Example Module: consensus.py
 - Docker Compose Setup (optional):
 - Simulates multiple distributed nodes on one machine.
 
+## Quick Start
+```bash
+# Create virtual environment (one time only)
+python3 -m venv syncpay_env
 
+# Activate virtual environment (do this every time you work)
+source syncpay_env/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Start the cluster
+chmod +x run_cluster.sh
+./run_cluster.sh
+
+# Run tests
+python test_payments.py
+```
+
+## API Endpoints
+- POST /payment - Process a payment
+- GET /transactions - Get all transactions  
+- GET /health - Health check
+- GET /status - Node status
