@@ -32,6 +32,10 @@ class SyncPayNode:
         self.time_sync = TimeSynchronizer(self)        # Member 3
         self.consensus = RaftConsensus(self)           # Member 4
         
+        # Initialize deduplication manager (optional component)
+        from replication.deduplication import DeduplicationManager
+        self.deduplication_manager = DeduplicationManager(self)
+        
         # Setup routes
         self.setup_routes()
         
@@ -116,15 +120,23 @@ class SyncPayNode:
         # Internal endpoints for component communication
         @self.app.route('/replicate', methods=['POST'])
         def handle_replication():
-            return self.replicator.handle_replication_request(request)
+            response_data, status_code = self.replicator.handle_replication_request(request)
+            return jsonify(response_data), status_code
+        
+        @self.app.route('/replicate/batch', methods=['POST'])
+        def handle_batch_replication():
+            response_data, status_code = self.replicator.handle_batch_replication_request(request)
+            return jsonify(response_data), status_code
         
         @self.app.route('/consensus', methods=['POST'])
         def handle_consensus():
-            return self.consensus.handle_consensus_request(request)
+            response_data, status_code = self.consensus.handle_consensus_request(request)
+            return jsonify(response_data), status_code
         
         @self.app.route('/time_sync', methods=['POST'])  
         def handle_time_sync():
-            return self.time_sync.handle_sync_request(request)
+            response_data, status_code = self.time_sync.handle_sync_request(request)
+            return jsonify(response_data), status_code
     
     def start(self):
         """Start all background services and the Flask server"""
@@ -135,6 +147,7 @@ class SyncPayNode:
         self.replicator.start()         # Member 2: Start replication service
         self.time_sync.start()          # Member 3: Start time synchronization
         self.consensus.start()          # Member 4: Start consensus protocol
+        self.deduplication_manager.start()  # Start deduplication service
         
         # Start Flask server
         host = self.node_config['host']

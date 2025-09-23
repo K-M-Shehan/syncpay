@@ -112,7 +112,7 @@ class TimeSynchronizer:
 
             time.sleep(2.0)  # Brief pause between rounds
 
-        self.logger.info(".3f")
+        self.logger.info(f"Initial sync completed. Offset: {self.time_offset:.3f}s")
 
     def _perform_sync_round(self):
         """Perform one round of synchronization with all peers"""
@@ -254,7 +254,7 @@ class TimeSynchronizer:
         if len(filtered_offsets) > 1:
             self.sync_accuracy = statistics.stdev(filtered_offsets) / 2  # Half the standard deviation
 
-        self.logger.debug(".3f")
+        self.logger.debug(f"Calculated offset: {self.time_offset:.3f}s, accuracy: {self.sync_accuracy:.3f}s")
 
     def _filter_outliers(self, offsets: List[float]) -> List[float]:
         """Filter out outlier offsets using statistical method"""

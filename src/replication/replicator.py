@@ -252,7 +252,12 @@ class PaymentReplicator:
                     }, 200
 
             # Store transaction locally
-            with self.node.consensus.consensus_lock:  # Ensure thread safety
+            # Use threading lock instead of consensus lock for transaction storage
+            import threading
+            if not hasattr(self.node, '_transaction_lock'):
+                self.node._transaction_lock = threading.Lock()
+                
+            with self.node._transaction_lock:  # Ensure thread safety
                 if transaction.id not in self.node.transactions:
                     self.node.transactions[transaction.id] = transaction
                     self.node.transaction_log.append(transaction)
@@ -270,6 +275,72 @@ class PaymentReplicator:
 
         except Exception as e:
             self.logger.error(f"Error handling replication request: {e}")
+            return {"error": str(e)}, 500
+
+    def handle_batch_replication_request(self, request) -> tuple[Dict[str, Any], int]:
+        """
+        Handle incoming batch replication requests for sync operations
+        Returns (response_dict, status_code)
+        """
+        try:
+            data = request.get_json()
+
+            if not data or 'transactions' not in data:
+                return {"error": "Missing transactions data"}, 400
+
+            transactions_data = data['transactions']
+            source_node = data.get('source_node', 'unknown')
+            is_sync = data.get('is_sync', False)
+
+            successful_count = 0
+            failed_count = 0
+            errors = []
+
+            for txn_data in transactions_data:
+                try:
+                    # Create transaction object
+                    transaction = self._dict_to_transaction(txn_data)
+
+                    # Check for duplicates
+                    if hasattr(self.node, 'deduplication_manager'):
+                        is_duplicate, original_id = self.node.deduplication_manager.is_duplicate_transaction(transaction)
+                        if is_duplicate and not is_sync:
+                            continue  # Skip duplicates in normal operation
+
+                    # Store transaction locally
+                    import threading
+                    if not hasattr(self.node, '_transaction_lock'):
+                        self.node._transaction_lock = threading.Lock()
+                        
+                    with self.node._transaction_lock:
+                        if transaction.id not in self.node.transactions:
+                            self.node.transactions[transaction.id] = transaction
+                            self.node.transaction_log.append(transaction)
+
+                            # Register with deduplication manager
+                            if hasattr(self.node, 'deduplication_manager'):
+                                self.node.deduplication_manager.register_transaction(transaction)
+
+                            successful_count += 1
+                        else:
+                            successful_count += 1  # Already exists, consider successful
+
+                except Exception as e:
+                    failed_count += 1
+                    errors.append(f"Transaction {txn_data.get('id', 'unknown')}: {str(e)}")
+
+            self.logger.info(f"Batch replication from {source_node}: {successful_count}/{len(transactions_data)} successful")
+
+            return {
+                "status": "completed",
+                "successful_count": successful_count,
+                "failed_count": failed_count,
+                "total_count": len(transactions_data),
+                "errors": errors
+            }, 200
+
+        except Exception as e:
+            self.logger.error(f"Error handling batch replication request: {e}")
             return {"error": str(e)}, 500
 
     def _dict_to_transaction(self, data: Dict) -> Any:
