@@ -136,6 +136,36 @@ Example Module: consensus.py
 - Simulates multiple distributed nodes on one machine.
 
 ## Quick Start
+
+### 🎬 Demo Options
+
+**Option 1: Quick 30-second Demo**
+```bash
+./quick_demo.sh
+```
+
+**Option 2: Interactive Demo (Recommended)**
+```bash
+./run_cluster.sh
+# Then use menu: 1=payment test, 2=stress test, 3=fault tolerance, s=status, q=quit
+```
+
+**Option 3: Automated Full Demo**
+```bash
+./run_cluster.sh auto
+```
+
+**Option 4: Single Test**
+```bash
+./run_cluster.sh test
+```
+
+### 🛑 Stop Cluster
+```bash
+./stop_cluster.sh
+```
+
+### 🧪 Manual Testing
 ```bash
 # Create virtual environment (one time only)
 python3 -m venv syncpay_env
@@ -146,12 +176,11 @@ source syncpay_env/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Start the cluster
-chmod +x run_cluster.sh
-./run_cluster.sh
+# Run comprehensive tests
+python -m pytest tests/ -v
 
-# Run tests
-python test_payments.py
+# Run end-to-end tests with real servers
+python tests/test_end_to_end.py --e2e
 ```
 
 ## API Endpoints
