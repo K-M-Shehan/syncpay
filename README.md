@@ -20,6 +20,7 @@
 | [🏛️ System Design](#️-system-design) | Design principles and patterns |
 | [🔧 Development](#-development) | Development setup and guidelines |
 | [📊 Implementation Details](#-implementation-details) | Performance and scalability |
+| [📋 Project Plan](#-project-plan) | Original project plan and completion status |
 | [🤝 Contributing](#-contributing) | How to contribute |
 
 ## 🌟 Overview
@@ -444,59 +445,6 @@ syncpay/
 - Metrics and monitoring
 - Docker containerization
 
-## 🤝 Contributing
-
-### Development Setup
-
-```bash
-# Clone and setup
-git clone https://github.com/K-M-Shehan/syncpay.git
-cd syncpay
-python3 -m venv syncpay_env
-source syncpay_env/bin/activate
-pip install -r requirements.txt
-
-# Run tests
-python -m pytest tests/ -v
-
-# Start development cluster
-./run_cluster.sh
-```
-
-### Contributing Guidelines
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Write** tests for your changes
-4. **Ensure** all tests pass (`python -m pytest tests/ -v`)
-5. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-6. **Push** to the branch (`git push origin feature/amazing-feature`)
-7. **Create** a Pull Request
-
-### Code Style
-
-- Follow PEP 8 style guidelines
-- Use meaningful variable names
-- Add docstrings to functions and classes
-- Include type hints where appropriate
-- Maintain test coverage
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Raft Algorithm** - Diego Ongaro and John Ousterhout
-- **Distributed Systems Concepts** - Martin Kleppmann's "Designing Data-Intensive Applications"
-- **Python Community** - For excellent libraries and tools
-
----
-
-## 📋 Project Plan
-
 ---
 
 ## 📋 Project Plan
@@ -622,3 +570,52 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### ✅ **Project Status: COMPLETED**
 
 All components have been successfully implemented, tested, and integrated into a production-ready distributed payment processing system with comprehensive documentation and interactive demonstrations.
+
+## 🤝 Contributing
+
+### Development Setup
+
+```bash
+# Clone and setup
+git clone https://github.com/K-M-Shehan/syncpay.git
+cd syncpay
+python3 -m venv syncpay_env
+source syncpay_env/bin/activate
+pip install -r requirements.txt
+
+# Run tests
+python -m pytest tests/ -v
+
+# Start development cluster
+./run_cluster.sh
+```
+
+### Contributing Guidelines
+
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Write** tests for your changes
+4. **Ensure** all tests pass (`python -m pytest tests/ -v`)
+5. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+6. **Push** to the branch (`git push origin feature/amazing-feature`)
+7. **Create** a Pull Request
+
+### Code Style
+
+- Follow PEP 8 style guidelines
+- Use meaningful variable names
+- Add docstrings to functions and classes
+- Include type hints where appropriate
+- Maintain test coverage
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Raft Algorithm** - Diego Ongaro and John Ousterhout
+- **Distributed Systems Concepts** - Martin Kleppmann's "Designing Data-Intensive Applications"
+- **Python Community** - For excellent libraries and tools
