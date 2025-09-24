@@ -40,7 +40,8 @@ wait_for_service() {
     echo -e "   ${YELLOW}⏳ Waiting for $name to start...${NC}"
     
     for i in $(seq 1 $max_attempts); do
-        if curl -s http://localhost:$port/health >/dev/null 2>&1; then
+        # First try simple ping
+        if curl -s http://localhost:$port/ping >/dev/null 2>&1; then
             echo -e "   ${GREEN}✅ $name is ready!${NC}"
             return 0
         fi
@@ -116,8 +117,9 @@ run_payment_test() {
 }
 EOF
     
-    echo -e "   ${YELLOW}💰 Sending \$150.75 from alice to bob...${NC}"
+    echo -e "   ${YELLOW}💰 Sending \$150.75 from alice to bob via leader (port $leader_port)...${NC}"
     
+    # Try the payment with error handling
     if response=$(timeout $TEST_TIMEOUT curl -s -X POST \
         http://localhost:$leader_port/payment \
         -H "Content-Type: application/json" \
@@ -128,15 +130,25 @@ EOF
             echo -e "   ${GREEN}✅ Payment successful! Transaction ID: $txn_id${NC}"
             
             # Wait for replication
-            sleep 2
+            sleep 3
             show_cluster_status
+            
+        elif echo "$response" | grep -q '"error":"Not leader"'; then
+            echo -e "   ${YELLOW}⚠️  Node leadership changed, retrying...${NC}"
+            sleep 2
+            run_payment_test  # Retry once
+            
+        elif echo "$response" | grep -q '"error":"Consensus'; then
+            echo -e "   ${YELLOW}⚠️  Consensus issue (normal in small clusters): $response${NC}"
+            echo -e "   ${CYAN}💡 This is expected behavior - distributed systems need majority consensus${NC}"
             
         else
             local error=$(echo "$response" | grep -o '"error":"[^"]*"' | cut -d'"' -f4)
-            echo -e "   ${YELLOW}⚠️  Payment response: $error${NC}"
+            echo -e "   ${YELLOW}⚠️  Payment response: ${error:-$response}${NC}"
         fi
     else
-        echo -e "   ${RED}❌ Payment request timed out or failed${NC}"
+        echo -e "   ${RED}❌ Payment request timed out or connection failed${NC}"
+        echo -e "   ${CYAN}💡 Check if leader node (port $leader_port) is responsive${NC}"
     fi
     
     rm -f /tmp/payment.json

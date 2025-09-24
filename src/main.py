@@ -49,6 +49,10 @@ class SyncPayNode:
                 if not all(k in data for k in ['amount', 'sender', 'receiver']):
                     return jsonify({"error": "Missing required fields"}), 400
                 
+                # Check if this node can process payments
+                if not self.consensus.is_leader():
+                    return jsonify({"error": "Not leader - cannot process payments"}), 503
+                
                 # Create transaction with synchronized timestamp
                 transaction = PaymentTransaction.create(
                     amount=float(data['amount']),
@@ -60,16 +64,47 @@ class SyncPayNode:
                 # Apply time synchronization (Member 3)
                 transaction.timestamp = self.time_sync.get_synchronized_time()
                 
-                # Achieve consensus before processing (Member 4)
-                if not self.consensus.propose_transaction(transaction):
-                    return jsonify({"error": "Consensus failed"}), 500
+                # Try to achieve consensus with timeout (Member 4)
+                import threading
+                import queue
+                
+                consensus_result = queue.Queue()
+                
+                def try_consensus():
+                    try:
+                        result = self.consensus.propose_transaction(transaction)
+                        consensus_result.put(('success', result))
+                    except Exception as e:
+                        consensus_result.put(('error', str(e)))
+                
+                # Run consensus in a separate thread with timeout
+                consensus_thread = threading.Thread(target=try_consensus)
+                consensus_thread.daemon = True
+                consensus_thread.start()
+                consensus_thread.join(timeout=3.0)  # 3 second timeout
+                
+                if consensus_thread.is_alive():
+                    return jsonify({"error": "Consensus timeout"}), 504
+                
+                try:
+                    result_type, result = consensus_result.get_nowait()
+                    if result_type == 'error':
+                        return jsonify({"error": f"Consensus error: {result}"}), 500
+                    elif not result:
+                        return jsonify({"error": "Consensus failed"}), 500
+                except queue.Empty:
+                    return jsonify({"error": "Consensus timeout"}), 504
                 
                 # Store transaction locally
                 self.transactions[transaction.id] = transaction
                 self.transaction_log.append(transaction)
                 
-                # Replicate to other nodes (Member 2)
-                self.replicator.replicate_transaction(transaction)
+                # Replicate to other nodes (Member 2) - don't wait for this
+                threading.Thread(
+                    target=self.replicator.replicate_transaction, 
+                    args=(transaction,), 
+                    daemon=True
+                ).start()
                 
                 # Mark as confirmed
                 transaction.status = "confirmed"
@@ -85,14 +120,19 @@ class SyncPayNode:
                 return jsonify({"error": str(e)}), 500
         
         @self.app.route('/health', methods=['GET'])
-        def health_check():
+        def get_health():
             return jsonify({
-                "status": "healthy",
                 "node_id": self.node_id,
-                "timestamp": self.time_sync.get_synchronized_time(),
+                "status": "healthy",
                 "is_leader": self.consensus.is_leader(),
+                "timestamp": self.time_sync.get_synchronized_time(),
                 "transaction_count": len(self.transactions)
             })
+        
+        @self.app.route('/ping', methods=['GET'])
+        def ping():
+            # Simple ping endpoint for testing connectivity
+            return jsonify({"status": "ok", "node_id": self.node_id})
         
         @self.app.route('/transactions', methods=['GET'])
         def get_transactions():

@@ -51,7 +51,7 @@ class RaftConsensus:
         self.votes_granted = {}  # term -> set of nodes that voted for us
 
         # Configuration
-        self.consensus_timeout = 5.0  # from config
+        self.consensus_timeout = 2.0  # Reduced from 5.0 for faster response
 
         # Setup logging
         logging.basicConfig(level=logging.INFO)
