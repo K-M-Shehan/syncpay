@@ -4,8 +4,11 @@ import uuid
 import threading
 import sys
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from models import PaymentTransaction, NodeInfo
 from config import Config
+from utils.metrics import MetricsCollector
 
 # Import component modules (each member implements their part)
 from fault_tolerance.health_monitor import HealthMonitor
@@ -18,6 +21,10 @@ class SyncPayNode:
         self.node_id = node_id
         self.config = Config(config_file)
         self.node_config = self.config.node_configs[node_id]
+        self._setup_logging()
+        
+        # Get logger after setting up logging
+        self.logger = logging.getLogger(f"SyncPayNode-{node_id}")
         
         # Initialize Flask app
         self.app = Flask(__name__)
@@ -25,6 +32,10 @@ class SyncPayNode:
         # Storage for transactions (in-memory for demo)
         self.transactions = {}
         self.transaction_log = []
+        self._transaction_lock = threading.Lock()  # Thread-safe access to transactions
+        
+        # Initialize metrics collector
+        self.metrics = MetricsCollector(node_id)
         
         # Initialize components (each member's responsibility)
         self.health_monitor = HealthMonitor(self)      # Member 1
@@ -38,26 +49,90 @@ class SyncPayNode:
         
         # Setup routes
         self.setup_routes()
+
+    def _setup_logging(self):
+        """Configure logging to file to avoid blocking stdout/stderr pipes"""
+        try:
+            # Determine logs directory at project root
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+            logs_dir = os.path.join(base_dir, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+
+            log_path = os.path.join(logs_dir, f"{self.node_id}.log")
+
+            # Reset root handlers to avoid duplicate logs
+            root_logger = logging.getLogger()
+            for h in list(root_logger.handlers):
+                root_logger.removeHandler(h)
+
+            handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=3)
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+            handler.setFormatter(formatter)
+
+            root_logger.addHandler(handler)
+            root_logger.setLevel(logging.INFO)
+
+            # Reduce noisy loggers
+            logging.getLogger('werkzeug').setLevel(logging.WARNING)
+        except Exception as e:
+            # As a fallback, at least ensure logging is configured
+            logging.basicConfig(level=logging.INFO)
         
     def setup_routes(self):
         @self.app.route('/payment', methods=['POST'])
         def process_payment():
+            # Start timer for request processing
+            timer_id = self.metrics.start_timer('payment_request')
+            self.metrics.increment('payment_requests_total')
+            
             try:
                 data = request.json
                 
                 # Validate input
+                if not data:
+                    self.metrics.increment('payment_errors_validation')
+                    return jsonify({"error": "Request body is required"}), 400
+                
                 if not all(k in data for k in ['amount', 'sender', 'receiver']):
-                    return jsonify({"error": "Missing required fields"}), 400
+                    self.metrics.increment('payment_errors_validation')
+                    return jsonify({"error": "Missing required fields: amount, sender, receiver"}), 400
+                
+                # Validate amount
+                try:
+                    amount = float(data['amount'])
+                    if amount <= 0:
+                        return jsonify({"error": "Amount must be positive"}), 400
+                    if amount > self.config.payment_max_amount:
+                        return jsonify({"error": f"Amount exceeds maximum limit of {self.config.payment_max_amount}"}), 400
+                except (ValueError, TypeError):
+                    return jsonify({"error": "Invalid amount format"}), 400
+                
+                # Validate sender and receiver
+                sender = str(data['sender']).strip()
+                receiver = str(data['receiver']).strip()
+                
+                if not sender or not receiver:
+                    return jsonify({"error": "Sender and receiver cannot be empty"}), 400
+                
+                if sender == receiver:
+                    return jsonify({"error": "Sender and receiver cannot be the same"}), 400
+                
+                if len(sender) > self.config.payment_max_name_length or len(receiver) > self.config.payment_max_name_length:
+                    return jsonify({"error": f"Sender/receiver names too long (max {self.config.payment_max_name_length} chars)"}), 400
                 
                 # Check if this node can process payments
                 if not self.consensus.is_leader():
-                    return jsonify({"error": "Not leader - cannot process payments"}), 503
+                    self.metrics.increment('payment_errors_not_leader')
+                    return jsonify({
+                        "error": "Not leader - cannot process payments",
+                        "leader": self.consensus.current_leader
+                    }), 503
                 
                 # Create transaction with synchronized timestamp
                 transaction = PaymentTransaction.create(
-                    amount=float(data['amount']),
-                    sender=data['sender'],
-                    receiver=data['receiver'], 
+                    amount=amount,
+                    sender=sender,
+                    receiver=receiver, 
                     node_id=self.node_id
                 )
                 
@@ -81,7 +156,7 @@ class SyncPayNode:
                 consensus_thread = threading.Thread(target=try_consensus)
                 consensus_thread.daemon = True
                 consensus_thread.start()
-                consensus_thread.join(timeout=3.0)  # 3 second timeout
+                consensus_thread.join(timeout=5.0)  # Allow more time for consensus
                 
                 if consensus_thread.is_alive():
                     return jsonify({"error": "Consensus timeout"}), 504
@@ -96,8 +171,9 @@ class SyncPayNode:
                     return jsonify({"error": "Consensus timeout"}), 504
                 
                 # Store transaction locally
-                self.transactions[transaction.id] = transaction
-                self.transaction_log.append(transaction)
+                with self._transaction_lock:
+                    self.transactions[transaction.id] = transaction
+                    self.transaction_log.append(transaction)
                 
                 # Replicate to other nodes (Member 2) - don't wait for this
                 threading.Thread(
@@ -109,18 +185,41 @@ class SyncPayNode:
                 # Mark as confirmed
                 transaction.status = "confirmed"
                 
+                # Record success metrics
+                self.metrics.increment('payment_success')
+                self.metrics.record_value('payment_amount', amount)
+                duration = self.metrics.stop_timer(timer_id)
+                
                 return jsonify({
                     "status": "success",
                     "transaction_id": transaction.id,
                     "timestamp": transaction.timestamp,
+                    "amount": amount,
+                    "sender": sender,
+                    "receiver": receiver,
                     "processed_by": self.node_id
                 })
                 
+            except ValueError as e:
+                self.metrics.increment('payment_errors_validation')
+                self.metrics.stop_timer(timer_id)
+                return jsonify({"error": f"Validation error: {str(e)}"}), 400
+            except TimeoutError as e:
+                self.metrics.increment('payment_errors_timeout')
+                self.metrics.stop_timer(timer_id)
+                return jsonify({"error": "Request timeout", "details": str(e)}), 504
             except Exception as e:
-                return jsonify({"error": str(e)}), 500
+                self.metrics.increment('payment_errors_internal')
+                self.metrics.stop_timer(timer_id)
+                self.logger.error(f"Error processing payment: {e}", exc_info=True)
+                return jsonify({"error": "Internal server error", "details": str(e)}), 500
         
         @self.app.route('/health', methods=['GET'])
         def get_health():
+            # Update metrics gauges
+            self.metrics.set_gauge('transaction_count', len(self.transactions))
+            self.metrics.set_gauge('is_leader', 1 if self.consensus.is_leader() else 0)
+            
             return jsonify({
                 "node_id": self.node_id,
                 "status": "healthy",
@@ -137,10 +236,11 @@ class SyncPayNode:
         @self.app.route('/transactions', methods=['GET'])
         def get_transactions():
             # Return transactions sorted by synchronized timestamp
-            sorted_transactions = sorted(
-                [t.to_dict() for t in self.transactions.values()],
-                key=lambda x: x['timestamp']
-            )
+            with self._transaction_lock:
+                sorted_transactions = sorted(
+                    [t.to_dict() for t in self.transactions.values()],
+                    key=lambda x: x['timestamp']
+                )
             return jsonify({
                 "transactions": sorted_transactions,
                 "total_count": len(sorted_transactions),
@@ -156,6 +256,21 @@ class SyncPayNode:
                 "replication_status": self.replicator.get_replication_status(),
                 "time_offset": self.time_sync.get_time_offset()
             })
+        
+        @self.app.route('/metrics', methods=['GET'])
+        def get_metrics():
+            """Get system metrics"""
+            format_type = request.args.get('format', 'json')
+            
+            if format_type == 'summary':
+                return self.metrics.get_summary(), 200, {'Content-Type': 'text/plain'}
+            else:
+                return jsonify(self.metrics.get_all_metrics())
+        
+        @self.app.route('/config', methods=['GET'])
+        def get_config():
+            """Get current configuration"""
+            return jsonify(self.config.to_dict())
         
         # Internal endpoints for component communication
         @self.app.route('/replicate', methods=['POST'])
@@ -182,19 +297,41 @@ class SyncPayNode:
         """Start all background services and the Flask server"""
         print(f"Starting SyncPay Node: {self.node_id}")
         
-        # Start component services
-        self.health_monitor.start()     # Member 1: Start health monitoring
-        self.replicator.start()         # Member 2: Start replication service
-        self.time_sync.start()          # Member 3: Start time synchronization
-        self.consensus.start()          # Member 4: Start consensus protocol
-        self.deduplication_manager.start()  # Start deduplication service
-        
-        # Start Flask server
-        host = self.node_config['host']
-        port = self.node_config['port']
-        print(f"SyncPay node {self.node_id} running on {host}:{port}")
-        
-        self.app.run(host=host, port=port, debug=False, threaded=True)
+        try:
+            # Start component services
+            self.health_monitor.start()     # Member 1: Start health monitoring
+            self.replicator.start()         # Member 2: Start replication service
+            self.time_sync.start()          # Member 3: Start time synchronization
+            self.consensus.start()          # Member 4: Start consensus protocol
+            self.deduplication_manager.start()  # Start deduplication service
+            
+            # Start Flask server
+            host = self.node_config['host']
+            port = self.node_config['port']
+            print(f"SyncPay node {self.node_id} running on {host}:{port}")
+            
+            self.app.run(host=host, port=port, debug=False, threaded=True)
+        except KeyboardInterrupt:
+            print(f"\n\nShutting down {self.node_id} gracefully...")
+            self.stop()
+        except Exception as e:
+            print(f"Error starting node: {e}")
+            self.stop()
+            raise
+    
+    def stop(self):
+        """Stop all services gracefully"""
+        try:
+            print(f"Stopping {self.node_id} services...")
+            self.health_monitor.stop()
+            self.replicator.stop()
+            self.time_sync.stop()
+            self.consensus.stop()
+            if hasattr(self.deduplication_manager, 'stop'):
+                self.deduplication_manager.stop()
+            print(f"{self.node_id} stopped successfully")
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 def main():
     if len(sys.argv) != 2:
