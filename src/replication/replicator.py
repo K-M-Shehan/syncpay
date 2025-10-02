@@ -4,6 +4,8 @@
 import time
 import threading
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import json
 from typing import Dict, List, Optional, Any
 from collections import defaultdict, deque
@@ -30,6 +32,9 @@ class PaymentReplicator:
         self.retry_delay = 1.0  # seconds
         self.batch_size = 10  # Max transactions per batch
 
+        # HTTP Session with connection pooling for better performance
+        self.session = self._create_session()
+
         # Metrics
         self.replication_stats = {
             'total_sent': 0,
@@ -42,6 +47,29 @@ class PaymentReplicator:
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(f"Replicator-{node.node_id}")
+
+    def _create_session(self) -> requests.Session:
+        """Create a requests session with connection pooling and retry logic"""
+        session = requests.Session()
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=0,  # We handle retries manually for better control
+            backoff_factor=0,
+            status_forcelist=[]
+        )
+        
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=retry_strategy,
+            pool_block=False
+        )
+        
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
 
     def start(self):
         """Start the replication service"""
@@ -87,6 +115,10 @@ class PaymentReplicator:
             worker.join(timeout=5.0)
 
         self.worker_threads.clear()
+        
+        # Close session to release connections
+        if hasattr(self, 'session'):
+            self.session.close()
 
     def replicate_transaction(self, transaction):
         """
@@ -188,7 +220,7 @@ class PaymentReplicator:
 
         for attempt in range(self.max_retry_attempts):
             try:
-                response = requests.post(
+                response = self.session.post(
                     url,
                     json=payload,
                     timeout=self.replication_timeout,
@@ -256,12 +288,8 @@ class PaymentReplicator:
                     }, 200
 
             # Store transaction locally
-            # Use threading lock instead of consensus lock for transaction storage
-            import threading
-            if not hasattr(self.node, '_transaction_lock'):
-                self.node._transaction_lock = threading.Lock()
-                
-            with self.node._transaction_lock:  # Ensure thread safety
+            # Use node's transaction lock for thread safety
+            with self.node._transaction_lock:
                 if transaction.id not in self.node.transactions:
                     self.node.transactions[transaction.id] = transaction
                     self.node.transaction_log.append(transaction)
@@ -398,7 +426,7 @@ class PaymentReplicator:
         }
 
         try:
-            response = requests.post(
+            response = self.session.post(
                 url,
                 json=payload,
                 timeout=self.replication_timeout * 2,  # Longer timeout for batch
