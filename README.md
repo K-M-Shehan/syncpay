@@ -129,24 +129,42 @@ pip install -r requirements.txt
 - Interactive with step-by-step explanations
 - **Perfect for demonstrating the system's capabilities!**
 
-### 2. 🎯 Interactive Demo
+### 2. 🎯 Interactive Demo (ENHANCED)
 ```bash
 ./run_cluster.sh
 ```
 **Features:**
-- Interactive menu system
-- Real-time cluster monitoring
-- Payment processing tests
-- Stress testing capabilities
-- Fault tolerance demonstration
+- 🎨 Beautiful professional UI with formatted headers and tables
+- 📊 Real-time cluster monitoring with visual indicators
+- 💳 Payment processing tests with replication verification
+- ⚡ Stress testing with success/failure counters
+- 💥 Fault tolerance demonstration (node failure/recovery)
+- 🛡️ Input validation testing
+- 🚫 Non-leader rejection tests
+- 📈 Live metrics viewing
+- ⚙️ Configuration inspection
 
 **Menu Options:**
-- `1` - Run payment test
-- `2` - Run stress test (5 concurrent payments)
-- `3` - Demo fault tolerance (kill/restart nodes)
-- `s` - Show cluster status
-- `l` - View live logs
-- `q` - Quit
+
+**Basic Operations:**
+- `1` - Single Payment Test (with replication verification)
+- `2` - Stress Test (5 concurrent payments with counters)
+- `3` - Fault Tolerance Demo (kill/restart follower node)
+- `4` - Input Validation Tests (negative, self-payment, limits)
+
+**Advanced:**
+- `5` - Non-Leader Rejection Test
+- `6` - View System Metrics (histograms, latency, counters)
+- `7` - View Configuration (all settings)
+
+**Information:**
+- `s` - Show Cluster Status (formatted table)
+- `l` - View Live Logs (tail -f all nodes)
+- `h` - Show help menu
+
+**Control:**
+- `a` - Run All Tests (comprehensive automated suite)
+- `q` - Quit and shutdown cluster
 
 ### 3. ⚡ Quick Demo
 ```bash
