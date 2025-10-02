@@ -22,6 +22,9 @@ class SyncPayNode:
         self.node_config = self.config.node_configs[node_id]
         self._setup_logging()
         
+        # Get logger after setting up logging
+        self.logger = logging.getLogger(f"SyncPayNode-{node_id}")
+        
         # Initialize Flask app
         self.app = Flask(__name__)
         
@@ -78,18 +81,47 @@ class SyncPayNode:
                 data = request.json
                 
                 # Validate input
+                if not data:
+                    return jsonify({"error": "Request body is required"}), 400
+                
                 if not all(k in data for k in ['amount', 'sender', 'receiver']):
-                    return jsonify({"error": "Missing required fields"}), 400
+                    return jsonify({"error": "Missing required fields: amount, sender, receiver"}), 400
+                
+                # Validate amount
+                try:
+                    amount = float(data['amount'])
+                    if amount <= 0:
+                        return jsonify({"error": "Amount must be positive"}), 400
+                    if amount > 1000000:  # Reasonable upper limit
+                        return jsonify({"error": "Amount exceeds maximum limit"}), 400
+                except (ValueError, TypeError):
+                    return jsonify({"error": "Invalid amount format"}), 400
+                
+                # Validate sender and receiver
+                sender = str(data['sender']).strip()
+                receiver = str(data['receiver']).strip()
+                
+                if not sender or not receiver:
+                    return jsonify({"error": "Sender and receiver cannot be empty"}), 400
+                
+                if sender == receiver:
+                    return jsonify({"error": "Sender and receiver cannot be the same"}), 400
+                
+                if len(sender) > 100 or len(receiver) > 100:
+                    return jsonify({"error": "Sender/receiver names too long"}), 400
                 
                 # Check if this node can process payments
                 if not self.consensus.is_leader():
-                    return jsonify({"error": "Not leader - cannot process payments"}), 503
+                    return jsonify({
+                        "error": "Not leader - cannot process payments",
+                        "leader": self.consensus.current_leader
+                    }), 503
                 
                 # Create transaction with synchronized timestamp
                 transaction = PaymentTransaction.create(
-                    amount=float(data['amount']),
-                    sender=data['sender'],
-                    receiver=data['receiver'], 
+                    amount=amount,
+                    sender=sender,
+                    receiver=receiver, 
                     node_id=self.node_id
                 )
                 
@@ -146,11 +178,19 @@ class SyncPayNode:
                     "status": "success",
                     "transaction_id": transaction.id,
                     "timestamp": transaction.timestamp,
+                    "amount": amount,
+                    "sender": sender,
+                    "receiver": receiver,
                     "processed_by": self.node_id
                 })
                 
+            except ValueError as e:
+                return jsonify({"error": f"Validation error: {str(e)}"}), 400
+            except TimeoutError as e:
+                return jsonify({"error": "Request timeout", "details": str(e)}), 504
             except Exception as e:
-                return jsonify({"error": str(e)}), 500
+                self.logger.error(f"Error processing payment: {e}", exc_info=True)
+                return jsonify({"error": "Internal server error", "details": str(e)}), 500
         
         @self.app.route('/health', methods=['GET'])
         def get_health():
@@ -216,19 +256,41 @@ class SyncPayNode:
         """Start all background services and the Flask server"""
         print(f"Starting SyncPay Node: {self.node_id}")
         
-        # Start component services
-        self.health_monitor.start()     # Member 1: Start health monitoring
-        self.replicator.start()         # Member 2: Start replication service
-        self.time_sync.start()          # Member 3: Start time synchronization
-        self.consensus.start()          # Member 4: Start consensus protocol
-        self.deduplication_manager.start()  # Start deduplication service
-        
-        # Start Flask server
-        host = self.node_config['host']
-        port = self.node_config['port']
-        print(f"SyncPay node {self.node_id} running on {host}:{port}")
-        
-        self.app.run(host=host, port=port, debug=False, threaded=True)
+        try:
+            # Start component services
+            self.health_monitor.start()     # Member 1: Start health monitoring
+            self.replicator.start()         # Member 2: Start replication service
+            self.time_sync.start()          # Member 3: Start time synchronization
+            self.consensus.start()          # Member 4: Start consensus protocol
+            self.deduplication_manager.start()  # Start deduplication service
+            
+            # Start Flask server
+            host = self.node_config['host']
+            port = self.node_config['port']
+            print(f"SyncPay node {self.node_id} running on {host}:{port}")
+            
+            self.app.run(host=host, port=port, debug=False, threaded=True)
+        except KeyboardInterrupt:
+            print(f"\n\nShutting down {self.node_id} gracefully...")
+            self.stop()
+        except Exception as e:
+            print(f"Error starting node: {e}")
+            self.stop()
+            raise
+    
+    def stop(self):
+        """Stop all services gracefully"""
+        try:
+            print(f"Stopping {self.node_id} services...")
+            self.health_monitor.stop()
+            self.replicator.stop()
+            self.time_sync.stop()
+            self.consensus.stop()
+            if hasattr(self.deduplication_manager, 'stop'):
+                self.deduplication_manager.stop()
+            print(f"{self.node_id} stopped successfully")
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 def main():
     if len(sys.argv) != 2:
