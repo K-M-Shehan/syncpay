@@ -4,6 +4,8 @@ import uuid
 import threading
 import sys
 import os
+import logging
+from logging.handlers import RotatingFileHandler
 from models import PaymentTransaction, NodeInfo
 from config import Config
 
@@ -18,6 +20,7 @@ class SyncPayNode:
         self.node_id = node_id
         self.config = Config(config_file)
         self.node_config = self.config.node_configs[node_id]
+        self._setup_logging()
         
         # Initialize Flask app
         self.app = Flask(__name__)
@@ -25,6 +28,7 @@ class SyncPayNode:
         # Storage for transactions (in-memory for demo)
         self.transactions = {}
         self.transaction_log = []
+        self._transaction_lock = threading.Lock()  # Thread-safe access to transactions
         
         # Initialize components (each member's responsibility)
         self.health_monitor = HealthMonitor(self)      # Member 1
@@ -38,6 +42,34 @@ class SyncPayNode:
         
         # Setup routes
         self.setup_routes()
+
+    def _setup_logging(self):
+        """Configure logging to file to avoid blocking stdout/stderr pipes"""
+        try:
+            # Determine logs directory at project root
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+            logs_dir = os.path.join(base_dir, 'logs')
+            os.makedirs(logs_dir, exist_ok=True)
+
+            log_path = os.path.join(logs_dir, f"{self.node_id}.log")
+
+            # Reset root handlers to avoid duplicate logs
+            root_logger = logging.getLogger()
+            for h in list(root_logger.handlers):
+                root_logger.removeHandler(h)
+
+            handler = RotatingFileHandler(log_path, maxBytes=1_000_000, backupCount=3)
+            formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+            handler.setFormatter(formatter)
+
+            root_logger.addHandler(handler)
+            root_logger.setLevel(logging.INFO)
+
+            # Reduce noisy loggers
+            logging.getLogger('werkzeug').setLevel(logging.WARNING)
+        except Exception as e:
+            # As a fallback, at least ensure logging is configured
+            logging.basicConfig(level=logging.INFO)
         
     def setup_routes(self):
         @self.app.route('/payment', methods=['POST'])
@@ -81,7 +113,7 @@ class SyncPayNode:
                 consensus_thread = threading.Thread(target=try_consensus)
                 consensus_thread.daemon = True
                 consensus_thread.start()
-                consensus_thread.join(timeout=3.0)  # 3 second timeout
+                consensus_thread.join(timeout=5.0)  # Allow more time for consensus
                 
                 if consensus_thread.is_alive():
                     return jsonify({"error": "Consensus timeout"}), 504
@@ -96,8 +128,9 @@ class SyncPayNode:
                     return jsonify({"error": "Consensus timeout"}), 504
                 
                 # Store transaction locally
-                self.transactions[transaction.id] = transaction
-                self.transaction_log.append(transaction)
+                with self._transaction_lock:
+                    self.transactions[transaction.id] = transaction
+                    self.transaction_log.append(transaction)
                 
                 # Replicate to other nodes (Member 2) - don't wait for this
                 threading.Thread(
@@ -137,10 +170,11 @@ class SyncPayNode:
         @self.app.route('/transactions', methods=['GET'])
         def get_transactions():
             # Return transactions sorted by synchronized timestamp
-            sorted_transactions = sorted(
-                [t.to_dict() for t in self.transactions.values()],
-                key=lambda x: x['timestamp']
-            )
+            with self._transaction_lock:
+                sorted_transactions = sorted(
+                    [t.to_dict() for t in self.transactions.values()],
+                    key=lambda x: x['timestamp']
+                )
             return jsonify({
                 "transactions": sorted_transactions,
                 "total_count": len(sorted_transactions),

@@ -197,9 +197,13 @@ class PaymentReplicator:
 
                 if response.status_code == 200:
                     response_data = response.json()
-                    if response_data.get('status') == 'success':
+                    status = response_data.get('status')
+                    if status == 'success':
                         self.logger.debug(f"Successfully replicated transaction {transaction.id} to {peer}")
                         return True
+                    elif status == 'duplicate' or status == 'already_exists':
+                        self.logger.debug(f"Transaction {transaction.id} already exists on {peer}")
+                        return True  # Treat duplicates as success
                     else:
                         self.logger.warning(f"Replication rejected by {peer}: {response_data.get('error', 'unknown error')}")
                         return False

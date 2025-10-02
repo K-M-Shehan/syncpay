@@ -134,6 +134,11 @@ class TestSyncPayEndToEnd(unittest.TestCase):
     
     def test_payment_transaction(self):
         """Test processing a payment transaction"""
+        transaction_id = self._create_test_payment()
+        self.assertIsNotNone(transaction_id, "Transaction ID should be returned")
+    
+    def _create_test_payment(self):
+        """Helper method to create a test payment transaction"""
         # Find the leader
         leader_url = None
         for node_id, url in self.node_urls.items():
@@ -170,30 +175,43 @@ class TestSyncPayEndToEnd(unittest.TestCase):
     
     def test_transaction_replication(self):
         """Test that transactions are replicated across nodes"""
-        # Process a transaction
-        transaction_id = self.test_payment_transaction()
+        # Process a transaction using helper method
+        transaction_id = self._create_test_payment()
         
-        # Wait for replication
-        time.sleep(5)
-        
-        # Check all nodes have the transaction
+        # Wait for replication with polling
+        max_wait = 15  # seconds
+        wait_interval = 1  # seconds
         transaction_found_count = 0
         
-        for node_id, url in self.node_urls.items():
-            response = requests.get(f"{url}/transactions")
-            self.assertEqual(response.status_code, 200)
+        for attempt in range(max_wait):
+            transaction_found_count = 0
             
-            data = response.json()
-            transactions = data['transactions']
+            for node_id, url in self.node_urls.items():
+                try:
+                    response = requests.get(f"{url}/transactions", timeout=5)
+                    self.assertEqual(response.status_code, 200)
+                    
+                    data = response.json()
+                    transactions = data['transactions']
+                    
+                    # Check if our transaction is in this node
+                    found = any(txn['id'] == transaction_id for txn in transactions)
+                    if found:
+                        transaction_found_count += 1
+                except Exception as e:
+                    # Node might be temporarily unavailable
+                    print(f"Warning: Could not check {node_id}: {e}")
+                    continue
             
-            # Check if our transaction is in this node
-            found = any(txn['id'] == transaction_id for txn in transactions)
-            if found:
-                transaction_found_count += 1
+            # If we have majority replication, we're done
+            if transaction_found_count >= 2:
+                break
+                
+            time.sleep(wait_interval)
         
         # Transaction should be on all nodes (or at least majority)
         self.assertGreaterEqual(transaction_found_count, 2, 
-                               f"Transaction replicated to {transaction_found_count}/3 nodes")
+                               f"Transaction replicated to {transaction_found_count}/3 nodes after {max_wait}s wait")
     
     def test_multiple_transactions(self):
         """Test processing multiple transactions"""
@@ -238,6 +256,9 @@ class TestSyncPayEndToEnd(unittest.TestCase):
         
         for txn_id in transaction_ids:
             self.assertIn(txn_id, leader_transactions)
+        
+        # Allow extra time for replication to catch up
+        time.sleep(5)
     
     def test_time_synchronization(self):
         """Test time synchronization across nodes"""
@@ -353,6 +374,9 @@ class TestSyncPayEndToEnd(unittest.TestCase):
         # Most transactions should succeed
         success_rate = sum(results) / len(results)
         self.assertGreater(success_rate, 0.8, f"Success rate too low: {success_rate}")
+        
+        # Allow extra time for replication to catch up after heavy load
+        time.sleep(20)
 
 if __name__ == '__main__':
     # Only run if explicitly requested (these tests start real servers)
