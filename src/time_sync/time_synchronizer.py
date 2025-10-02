@@ -4,6 +4,8 @@
 import time
 import threading
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import statistics
 from typing import Dict, List, Optional
 import logging
@@ -33,9 +35,28 @@ class TimeSynchronizer:
         self.is_running = False
         self.sync_thread = None
 
+        # HTTP Session for better performance
+        self.session = self._create_session()
+
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(f"TimeSync-{node.node_id}")
+
+    def _create_session(self) -> requests.Session:
+        """Create a requests session with connection pooling"""
+        session = requests.Session()
+        
+        adapter = HTTPAdapter(
+            pool_connections=5,
+            pool_maxsize=10,
+            max_retries=0,  # We handle retries manually
+            pool_block=False
+        )
+        
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
 
     def start(self):
         """Start the time synchronization service"""
@@ -57,6 +78,11 @@ class TimeSynchronizer:
         self.is_running = False
         if self.sync_thread:
             self.sync_thread.join(timeout=5.0)
+        
+        # Close session to release connections
+        if hasattr(self, 'session'):
+            self.session.close()
+            
         self.logger.info("Time synchronization service stopped")
 
     def get_synchronized_time(self) -> float:
@@ -156,7 +182,7 @@ class TimeSynchronizer:
             for attempt in range(3):  # 3 attempts for statistical accuracy
                 t1 = time.time()  # Local time before request
 
-                response = requests.post(
+                response = self.session.post(
                     f"http://{peer}/time_sync",
                     json={
                         't1': t1,

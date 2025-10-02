@@ -4,6 +4,8 @@
 import time
 import threading
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from typing import Dict, List
 import logging
 from datetime import datetime
@@ -17,9 +19,28 @@ class HealthMonitor:
         self.is_running = False
         self.monitor_thread = None
         
+        # HTTP Session for better performance
+        self.session = self._create_session()
+        
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(f"HealthMonitor-{node.node_id}")
+    
+    def _create_session(self) -> requests.Session:
+        """Create a requests session with connection pooling"""
+        session = requests.Session()
+        
+        adapter = HTTPAdapter(
+            pool_connections=5,
+            pool_maxsize=10,
+            max_retries=0,  # We handle failures manually
+            pool_block=False
+        )
+        
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
     
     def start(self):
         """Start health monitoring service"""
@@ -49,6 +70,11 @@ class HealthMonitor:
         self.is_running = False
         if self.monitor_thread:
             self.monitor_thread.join()
+        
+        # Close session to release connections
+        if hasattr(self, 'session'):
+            self.session.close()
+            
         self.logger.info("Health monitoring service stopped")
     
     def _monitor_loop(self):
@@ -72,7 +98,7 @@ class HealthMonitor:
         
         try:
             # Send health check request
-            response = requests.get(
+            response = self.session.get(
                 f"http://{peer_url}/health",
                 timeout=5,
                 headers={'Content-Type': 'application/json'}

@@ -4,6 +4,8 @@
 import time
 import threading
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 import random
 import json
 from enum import Enum
@@ -55,9 +57,28 @@ class RaftConsensus:
         # Configuration
         self.consensus_timeout = 2.0  # Reduced from 5.0 for faster response
 
+        # HTTP Session for better performance
+        self.session = self._create_session()
+
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(f"Raft-{node.node_id}")
+
+    def _create_session(self) -> requests.Session:
+        """Create a requests session with connection pooling"""
+        session = requests.Session()
+        
+        adapter = HTTPAdapter(
+            pool_connections=10,
+            pool_maxsize=20,
+            max_retries=0,  # We handle retries manually
+            pool_block=False
+        )
+        
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        
+        return session
 
     def start(self):
         """Start the Raft consensus service"""
@@ -87,6 +108,11 @@ class RaftConsensus:
         self.is_running = False
         if self.consensus_thread:
             self.consensus_thread.join(timeout=5.0)
+        
+        # Close session to release connections
+        if hasattr(self, 'session'):
+            self.session.close()
+            
         self.logger.info("Raft consensus service stopped")
 
     def is_leader(self) -> bool:
@@ -228,7 +254,7 @@ class RaftConsensus:
                 'last_log_term': self.log[-1][0] if self.log else 0
             }
 
-            response = requests.post(
+            response = self.session.post(
                 f"http://{peer}/consensus",
                 json={'type': 'request_vote', 'data': payload},
                 timeout=self.consensus_timeout
@@ -330,7 +356,7 @@ class RaftConsensus:
                 'leader_commit': self.commit_index
             }
 
-            response = requests.post(
+            response = self.session.post(
                 f"http://{peer}/consensus",
                 json={'type': 'append_entries', 'data': payload},
                 timeout=self.consensus_timeout
