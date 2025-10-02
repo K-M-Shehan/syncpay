@@ -91,49 +91,49 @@ class TestPaymentReplicator(unittest.TestCase):
             # Check metrics
             self.assertEqual(self.replicator.replication_stats['total_sent'], 2)
     
-    @patch('requests.post')
-    def test_send_replication_request_success(self, mock_post):
+    def test_send_replication_request_success(self):
         """Test successful replication request"""
         # Mock successful response
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {'status': 'success'}
-        mock_post.return_value = mock_response
         
-        # Create test transaction
-        transaction = PaymentTransaction.create(
-            amount=100.0,
-            sender='alice',
-            receiver='bob',
-            node_id='test_node'
-        )
-        
-        # Test replication
-        result = self.replicator._send_replication_request('peer1:5001', transaction)
-        
-        self.assertTrue(result)
-        mock_post.assert_called_once()
+        # Mock the session.post method
+        with patch.object(self.replicator.session, 'post', return_value=mock_response) as mock_post:
+            # Create test transaction
+            transaction = PaymentTransaction.create(
+                amount=100.0,
+                sender='alice',
+                receiver='bob',
+                node_id='test_node'
+            )
+            
+            # Test replication
+            result = self.replicator._send_replication_request('peer1:5001', transaction)
+            
+            self.assertTrue(result)
+            mock_post.assert_called_once()
     
-    @patch('requests.post')
-    def test_send_replication_request_failure(self, mock_post):
+    def test_send_replication_request_failure(self):
         """Test failed replication request"""
         # Mock failed response
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_post.return_value = mock_response
         
-        # Create test transaction
-        transaction = PaymentTransaction.create(
-            amount=100.0,
-            sender='alice',
-            receiver='bob',
-            node_id='test_node'
-        )
-        
-        # Test replication
-        result = self.replicator._send_replication_request('peer1:5001', transaction)
-        
-        self.assertFalse(result)
+        # Mock the session.post method
+        with patch.object(self.replicator.session, 'post', return_value=mock_response) as mock_post:
+            # Create test transaction
+            transaction = PaymentTransaction.create(
+                amount=100.0,
+                sender='alice',
+                receiver='bob',
+                node_id='test_node'
+            )
+            
+            # Test replication
+            result = self.replicator._send_replication_request('peer1:5001', transaction)
+            
+            self.assertFalse(result)
     
     def test_handle_replication_request_success(self):
         """Test handling incoming replication request"""

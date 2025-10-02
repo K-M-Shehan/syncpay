@@ -95,8 +95,7 @@ class TestTimeSynchronizer(unittest.TestCase):
         self.assertFalse(self.sync.is_running)
         mock_thread.join.assert_called_with(timeout=5.0)
     
-    @patch('requests.post')
-    def test_sync_with_peer_success(self, mock_post):
+    def test_sync_with_peer_success(self):
         """Test successful synchronization with a peer"""
         # Mock successful response
         current_time = time.time()
@@ -106,27 +105,28 @@ class TestTimeSynchronizer(unittest.TestCase):
             't2': current_time + 0.1,  # Peer received 0.1s later
             't3': current_time + 0.1   # Peer responded immediately
         }
-        mock_post.return_value = mock_response
         
-        # Sync with peer
-        offset = self.sync._sync_with_peer('peer1:5001')
-        
-        self.assertIsNotNone(offset)
-        self.assertIsInstance(offset, float)
-        mock_post.assert_called()
+        # Mock the session.post method
+        with patch.object(self.sync.session, 'post', return_value=mock_response) as mock_post:
+            # Sync with peer
+            offset = self.sync._sync_with_peer('peer1:5001')
+            
+            self.assertIsNotNone(offset)
+            self.assertIsInstance(offset, float)
+            mock_post.assert_called()
     
-    @patch('requests.post')
-    def test_sync_with_peer_failure(self, mock_post):
+    def test_sync_with_peer_failure(self):
         """Test failed synchronization with a peer"""
         # Mock failed response
         mock_response = Mock()
         mock_response.status_code = 500
-        mock_post.return_value = mock_response
         
-        # Sync with peer
-        offset = self.sync._sync_with_peer('peer1:5001')
-        
-        self.assertIsNone(offset)
+        # Mock the session.post method
+        with patch.object(self.sync.session, 'post', return_value=mock_response) as mock_post:
+            # Sync with peer
+            offset = self.sync._sync_with_peer('peer1:5001')
+            
+            self.assertIsNone(offset)
     
     def test_filter_outliers(self):
         """Test outlier filtering"""
