@@ -245,7 +245,7 @@ EOF
             print_step "Waiting for replication..."
             pause_for_effect 3
             
-            verify_replication
+            verify_replication || true  # Don't exit on replication warning
             
         elif echo "$response" | grep -q '"error":"Not leader"'; then
             print_warning "Node leadership changed, retrying..."
@@ -322,7 +322,7 @@ run_stress_test() {
     print_step "Waiting for replication to complete..."
     pause_for_effect 3
     
-    verify_replication
+    verify_replication || true  # Don't exit on replication warning
     show_cluster_status
 }
 
@@ -381,7 +381,7 @@ demo_fault_tolerance() {
         echo ""
         print_info "Verifying data synchronization..."
         pause_for_effect 2
-        verify_replication
+        verify_replication || true  # Don't exit on replication warning
     else
         print_error "Could not identify a follower node to test"
     fi
