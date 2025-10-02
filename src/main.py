@@ -8,6 +8,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from models import PaymentTransaction, NodeInfo
 from config import Config
+from utils.metrics import MetricsCollector
 
 # Import component modules (each member implements their part)
 from fault_tolerance.health_monitor import HealthMonitor
@@ -32,6 +33,9 @@ class SyncPayNode:
         self.transactions = {}
         self.transaction_log = []
         self._transaction_lock = threading.Lock()  # Thread-safe access to transactions
+        
+        # Initialize metrics collector
+        self.metrics = MetricsCollector(node_id)
         
         # Initialize components (each member's responsibility)
         self.health_monitor = HealthMonitor(self)      # Member 1
@@ -77,14 +81,20 @@ class SyncPayNode:
     def setup_routes(self):
         @self.app.route('/payment', methods=['POST'])
         def process_payment():
+            # Start timer for request processing
+            timer_id = self.metrics.start_timer('payment_request')
+            self.metrics.increment('payment_requests_total')
+            
             try:
                 data = request.json
                 
                 # Validate input
                 if not data:
+                    self.metrics.increment('payment_errors_validation')
                     return jsonify({"error": "Request body is required"}), 400
                 
                 if not all(k in data for k in ['amount', 'sender', 'receiver']):
+                    self.metrics.increment('payment_errors_validation')
                     return jsonify({"error": "Missing required fields: amount, sender, receiver"}), 400
                 
                 # Validate amount
@@ -112,6 +122,7 @@ class SyncPayNode:
                 
                 # Check if this node can process payments
                 if not self.consensus.is_leader():
+                    self.metrics.increment('payment_errors_not_leader')
                     return jsonify({
                         "error": "Not leader - cannot process payments",
                         "leader": self.consensus.current_leader
@@ -174,6 +185,11 @@ class SyncPayNode:
                 # Mark as confirmed
                 transaction.status = "confirmed"
                 
+                # Record success metrics
+                self.metrics.increment('payment_success')
+                self.metrics.record_value('payment_amount', amount)
+                duration = self.metrics.stop_timer(timer_id)
+                
                 return jsonify({
                     "status": "success",
                     "transaction_id": transaction.id,
@@ -185,15 +201,25 @@ class SyncPayNode:
                 })
                 
             except ValueError as e:
+                self.metrics.increment('payment_errors_validation')
+                self.metrics.stop_timer(timer_id)
                 return jsonify({"error": f"Validation error: {str(e)}"}), 400
             except TimeoutError as e:
+                self.metrics.increment('payment_errors_timeout')
+                self.metrics.stop_timer(timer_id)
                 return jsonify({"error": "Request timeout", "details": str(e)}), 504
             except Exception as e:
+                self.metrics.increment('payment_errors_internal')
+                self.metrics.stop_timer(timer_id)
                 self.logger.error(f"Error processing payment: {e}", exc_info=True)
                 return jsonify({"error": "Internal server error", "details": str(e)}), 500
         
         @self.app.route('/health', methods=['GET'])
         def get_health():
+            # Update metrics gauges
+            self.metrics.set_gauge('transaction_count', len(self.transactions))
+            self.metrics.set_gauge('is_leader', 1 if self.consensus.is_leader() else 0)
+            
             return jsonify({
                 "node_id": self.node_id,
                 "status": "healthy",
@@ -230,6 +256,16 @@ class SyncPayNode:
                 "replication_status": self.replicator.get_replication_status(),
                 "time_offset": self.time_sync.get_time_offset()
             })
+        
+        @self.app.route('/metrics', methods=['GET'])
+        def get_metrics():
+            """Get system metrics"""
+            format_type = request.args.get('format', 'json')
+            
+            if format_type == 'summary':
+                return self.metrics.get_summary(), 200, {'Content-Type': 'text/plain'}
+            else:
+                return jsonify(self.metrics.get_all_metrics())
         
         # Internal endpoints for component communication
         @self.app.route('/replicate', methods=['POST'])
