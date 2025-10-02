@@ -102,16 +102,34 @@ pip install -r requirements.txt
 ### Run Demo
 
 ```bash
+# Enhanced demo with all new features (recommended)
+./enhanced_demo.sh
+
 # Quick 30-second demo
 ./quick_demo.sh
 
-# Interactive demo (recommended)
+# Interactive demo
 ./run_cluster.sh
 ```
 
 ## 🎬 Demo Options
 
-### 1. 🎯 Interactive Demo (Recommended)
+### 1. � Enhanced Demo (NEW - Recommended)
+```bash
+./enhanced_demo.sh
+```
+**Features:**
+- Comprehensive showcase of all improvements
+- Demonstrates NEW configuration endpoint
+- Shows NEW metrics collection system
+- Validates input validation with multiple test cases
+- Processes 5 real transactions with different amounts
+- Verifies 100% data replication
+- Shows performance metrics and histograms
+- Interactive with step-by-step explanations
+- **Perfect for demonstrating the system's capabilities!**
+
+### 2. 🎯 Interactive Demo
 ```bash
 ./run_cluster.sh
 ```
@@ -130,7 +148,7 @@ pip install -r requirements.txt
 - `l` - View live logs
 - `q` - Quit
 
-### 2. ⚡ Quick Demo
+### 3. ⚡ Quick Demo
 ```bash
 ./quick_demo.sh
 ```
@@ -139,7 +157,7 @@ pip install -r requirements.txt
 - Shows all core functionality
 - Perfect for presentations
 
-### 3. 🤖 Automated Full Demo
+### 4. 🤖 Automated Full Demo
 ```bash
 ./run_cluster.sh auto
 ```
@@ -149,7 +167,7 @@ pip install -r requirements.txt
 - Stress testing
 - Fault tolerance scenarios
 
-### 4. 🔬 Single Test
+### 5. 🔬 Single Test
 ```bash
 ./run_cluster.sh test
 ```
@@ -158,7 +176,7 @@ pip install -r requirements.txt
 - Single payment test
 - Immediate results
 
-### 5. 🛑 Stop Cluster
+### 6. 🛑 Stop Cluster
 ```bash
 ./stop_cluster.sh
 ```
