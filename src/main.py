@@ -102,8 +102,8 @@ class SyncPayNode:
                     amount = float(data['amount'])
                     if amount <= 0:
                         return jsonify({"error": "Amount must be positive"}), 400
-                    if amount > 1000000:  # Reasonable upper limit
-                        return jsonify({"error": "Amount exceeds maximum limit"}), 400
+                    if amount > self.config.payment_max_amount:
+                        return jsonify({"error": f"Amount exceeds maximum limit of {self.config.payment_max_amount}"}), 400
                 except (ValueError, TypeError):
                     return jsonify({"error": "Invalid amount format"}), 400
                 
@@ -117,8 +117,8 @@ class SyncPayNode:
                 if sender == receiver:
                     return jsonify({"error": "Sender and receiver cannot be the same"}), 400
                 
-                if len(sender) > 100 or len(receiver) > 100:
-                    return jsonify({"error": "Sender/receiver names too long"}), 400
+                if len(sender) > self.config.payment_max_name_length or len(receiver) > self.config.payment_max_name_length:
+                    return jsonify({"error": f"Sender/receiver names too long (max {self.config.payment_max_name_length} chars)"}), 400
                 
                 # Check if this node can process payments
                 if not self.consensus.is_leader():
@@ -266,6 +266,11 @@ class SyncPayNode:
                 return self.metrics.get_summary(), 200, {'Content-Type': 'text/plain'}
             else:
                 return jsonify(self.metrics.get_all_metrics())
+        
+        @self.app.route('/config', methods=['GET'])
+        def get_config():
+            """Get current configuration"""
+            return jsonify(self.config.to_dict())
         
         # Internal endpoints for component communication
         @self.app.route('/replicate', methods=['POST'])
